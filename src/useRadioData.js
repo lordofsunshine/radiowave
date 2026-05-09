@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, startTransition } from 'react';
-import { getCountries, getStates, searchStations } from './api';
+import { getCountries, getStates, isRequestAbort, searchStations } from './api';
 
 const PAGE_SIZE = 50;
 
@@ -28,17 +28,28 @@ export function useRadioData() {
   const [searchName, setSearchName] = useState('');
   const [searchTag, setSearchTag] = useState('');
   const offsetRef = useRef(0);
+  const searchRequestRef = useRef(null);
+  const loadMoreRequestRef = useRef(null);
+  const requestIdRef = useRef(0);
 
   useEffect(() => {
-    getCountries()
+    const controller = new AbortController();
+
+    getCountries({ signal: controller.signal })
       .then((data) => {
         const filtered = data.filter((country) => country.stationcount > 0);
         startTransition(() => {
           setCountries(filtered);
         });
       })
-      .catch(() => setError('Failed to load countries'))
-      .finally(() => setLoadingCountries(false));
+      .catch((error) => {
+        if (!isRequestAbort(error)) setError(error.message || 'Failed to load countries');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoadingCountries(false);
+      });
+
+    return () => controller.abort();
   }, []);
 
   useEffect(() => {
@@ -47,13 +58,19 @@ export function useRadioData() {
       return;
     }
 
-    getStates(selectedCountry.name)
+    const controller = new AbortController();
+
+    getStates(selectedCountry.name, { signal: controller.signal })
       .then((data) => {
         startTransition(() => {
           setStates(data.filter((state) => state.stationcount > 0));
         });
       })
-      .catch(() => setStates([]));
+      .catch((error) => {
+        if (!isRequestAbort(error)) setStates([]);
+      });
+
+    return () => controller.abort();
   }, [selectedCountry]);
 
   const search = useCallback(
@@ -66,6 +83,13 @@ export function useRadioData() {
       setLoadingStations(true);
       setError(null);
       offsetRef.current = 0;
+      searchRequestRef.current?.abort();
+      loadMoreRequestRef.current?.abort();
+
+      const controller = new AbortController();
+      const requestId = requestIdRef.current + 1;
+      requestIdRef.current = requestId;
+      searchRequestRef.current = controller;
 
       try {
         const data = await searchStations({
@@ -75,7 +99,9 @@ export function useRadioData() {
           tag: searchTag || undefined,
           limit: PAGE_SIZE,
           offset: 0,
-        });
+        }, { signal: controller.signal });
+
+        if (requestIdRef.current !== requestId || controller.signal.aborted) return [];
 
         startTransition(() => {
           setStations(sortByLogo(data));
@@ -84,12 +110,18 @@ export function useRadioData() {
         });
 
         return data;
-      } catch {
-        setError('Failed to search stations');
-        setStations([]);
+      } catch (error) {
+        if (!isRequestAbort(error) && requestIdRef.current === requestId) {
+          setError(error.message || 'Failed to search stations');
+          setStations([]);
+          setHasMore(false);
+        }
         return [];
       } finally {
-        setLoadingStations(false);
+        if (requestIdRef.current === requestId && !controller.signal.aborted) {
+          setLoadingStations(false);
+        }
+        if (searchRequestRef.current === controller) searchRequestRef.current = null;
       }
     },
     [searchName, searchTag, selectedCountry, selectedState]
@@ -99,6 +131,11 @@ export function useRadioData() {
     if (!selectedCountry || loadingMore || !hasMore) return;
 
     setLoadingMore(true);
+    loadMoreRequestRef.current?.abort();
+
+    const controller = new AbortController();
+    const requestId = requestIdRef.current;
+    loadMoreRequestRef.current = controller;
 
     try {
       const data = await searchStations({
@@ -108,7 +145,9 @@ export function useRadioData() {
         tag: searchTag || undefined,
         limit: PAGE_SIZE,
         offset: offsetRef.current,
-      });
+      }, { signal: controller.signal });
+
+      if (requestIdRef.current !== requestId || controller.signal.aborted) return;
 
       startTransition(() => {
         setStations((prev) => {
@@ -119,9 +158,11 @@ export function useRadioData() {
         setHasMore(data.length >= PAGE_SIZE);
         offsetRef.current += data.length;
       });
-    } catch {
+    } catch (error) {
+      if (!isRequestAbort(error)) setError(error.message || 'Failed to load more stations');
     } finally {
-      setLoadingMore(false);
+      if (!controller.signal.aborted) setLoadingMore(false);
+      if (loadMoreRequestRef.current === controller) loadMoreRequestRef.current = null;
     }
   }, [selectedCountry, selectedState, searchName, searchTag, loadingMore, hasMore]);
 
@@ -135,6 +176,8 @@ export function useRadioData() {
   }, [search, selectedCountry, selectedState]);
 
   const setSelectedCountry = useCallback((country) => {
+    searchRequestRef.current?.abort();
+    loadMoreRequestRef.current?.abort();
     setSelectedCountryState(country);
     setSelectedState('');
     setSearchName('');
@@ -159,6 +202,13 @@ export function useRadioData() {
     },
     [countries, setSelectedCountry]
   );
+
+  useEffect(() => {
+    return () => {
+      searchRequestRef.current?.abort();
+      loadMoreRequestRef.current?.abort();
+    };
+  }, []);
 
   return {
     countries,

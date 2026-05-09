@@ -21,17 +21,33 @@ function StationList({ stations, loading, currentUuid, playing, onPlay, onLoadMo
   }, [onLoadMore, hasMore]);
   if (loading) {
     return (
-      <div className="rounded-[26px] border border-white/8 bg-white/6 px-4 py-12 text-center text-slate-300">
-        <div className="mx-auto h-8 w-8 rounded-full border-2 border-white/20 border-t-violet-400 animate-spin" />
-        <p className="mt-4 text-sm">Loading stations...</p>
+      <div className="space-y-2">
+        {Array.from({ length: 6 }, (_, index) => (
+          <div key={index} className="rounded-[24px] border border-white/8 bg-white/6 px-4 py-4">
+            <div className="flex items-center gap-3">
+              <div className="h-12 w-12 rounded-[18px] bg-white/10 skeleton-pulse" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <div className="h-4 w-3/4 rounded-full bg-white/10 skeleton-pulse" />
+                <div className="h-3 w-1/2 rounded-full bg-white/8 skeleton-pulse" />
+              </div>
+              <div className="h-10 w-10 rounded-full bg-white/10 skeleton-pulse" />
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
 
   if (!stations.length) {
     return (
-      <div className="rounded-[26px] border border-white/8 bg-white/6 px-4 py-12 text-center text-sm text-slate-400">
-        No stations found
+      <div className="rounded-[26px] border border-white/8 bg-white/6 px-5 py-12 text-center">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/8 text-white">
+          <SearchGlyph />
+        </div>
+        <h3 className="mt-4 text-sm font-semibold text-white">No stations found</h3>
+        <p className="mx-auto mt-2 max-w-56 text-sm text-slate-400">
+          Try another country, region, station name, or genre.
+        </p>
       </div>
     );
   }
@@ -129,6 +145,14 @@ function PauseGlyph() {
   return (
     <svg viewBox="0 0 20 20" className="h-4 w-4 fill-current">
       <path d="M6.7 5.1a1.2 1.2 0 011.2 1.2v7.4a1.2 1.2 0 11-2.4 0V6.3a1.2 1.2 0 011.2-1.2Zm6.6 0a1.2 1.2 0 011.2 1.2v7.4a1.2 1.2 0 11-2.4 0V6.3a1.2 1.2 0 011.2-1.2Z" />
+    </svg>
+  );
+}
+
+function SearchGlyph() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.7">
+      <path d="M10.8 18.1a7.3 7.3 0 100-14.6 7.3 7.3 0 000 14.6ZM16.2 16.2 21 21" strokeLinecap="round" />
     </svg>
   );
 }

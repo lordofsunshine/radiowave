@@ -22,7 +22,9 @@ async function detectCountryCode() {
     const response = await fetch('https://ipwho.is/');
     const data = await response.json();
     if (data?.success && data?.country_code) return String(data.country_code).toUpperCase();
-  } catch {}
+  } catch {
+    return '';
+  }
   return '';
 }
 
@@ -53,7 +55,6 @@ function pickBestStation(stations) {
 
 function App() {
   const radio = useRadioData();
-  const player = usePlayer();
   const [countryQuery, setCountryQuery] = useState('');
   const [detectedCountryCode, setDetectedCountryCode] = useState('');
   const [detectingCountry, setDetectingCountry] = useState(true);
@@ -71,6 +72,7 @@ function App() {
     searchName, setSearchName, searchTag, setSearchTag,
     search, loadMore,
   } = radio;
+  const player = usePlayer(stations);
   const playStation = player.play;
 
   const filteredCountries = useMemo(() => {
@@ -128,13 +130,23 @@ function App() {
     ? 'On Air'
     : player.loading
       ? 'Connecting...'
-      : detectingCountry
-        ? 'Detecting location...'
-        : loadingStations
-          ? 'Loading stations...'
-          : featuredStation
-            ? 'Ready'
-            : 'Select a country';
+      : player.streamStatus === 'blocked'
+        ? 'Tap to Play'
+        : player.streamStatus === 'stalled'
+          ? 'Stalled'
+          : player.streamStatus === 'error'
+            ? 'Stream Error'
+            : detectingCountry
+              ? 'Detecting location...'
+              : loadingStations
+                ? 'Loading stations...'
+                : featuredStation
+                  ? 'Ready'
+                  : 'Select a country';
+
+  const tryAnotherStation = () => {
+    if (player.hasNext) player.next();
+  };
 
   return (
     <div className="min-h-screen overflow-hidden bg-[#0c0d14] text-slate-100">
@@ -323,11 +335,20 @@ function App() {
                 </div>
               </div>
 
-              <div className="mt-8 flex items-center justify-center gap-4">
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+                <button
+                  onClick={player.previous}
+                  disabled={!player.hasPrevious}
+                  className="flex h-12 w-12 items-center justify-center rounded-full border border-white/12 bg-white/8 text-white transition duration-300 hover:border-white/24 hover:bg-white/14 disabled:opacity-40"
+                  title="Previous station"
+                >
+                  <PreviousIcon />
+                </button>
                 <button
                   onClick={() => player.stop({ clearCurrent: false })}
                   disabled={!featuredStation}
                   className="flex h-12 w-12 items-center justify-center rounded-full border border-white/12 bg-white/8 text-white transition duration-300 hover:border-white/24 hover:bg-white/14 disabled:opacity-40"
+                  title="Stop"
                 >
                   <StopIcon />
                 </button>
@@ -344,6 +365,14 @@ function App() {
                     <PlayIcon />
                   )}
                 </button>
+                <button
+                  onClick={player.next}
+                  disabled={!player.hasNext}
+                  className="flex h-12 w-12 items-center justify-center rounded-full border border-white/12 bg-white/8 text-white transition duration-300 hover:border-white/24 hover:bg-white/14 disabled:opacity-40"
+                  title="Next station"
+                >
+                  <NextIcon />
+                </button>
                 {featuredStation?.homepage && (
                   <a
                     href={featuredStation.homepage}
@@ -357,8 +386,30 @@ function App() {
                 )}
               </div>
 
+              {player.streamError && (
+                <div className="mt-5 rounded-2xl border border-amber-300/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-50">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <span>{player.streamError}</span>
+                    {player.hasNext && (
+                      <button
+                        onClick={tryAnotherStation}
+                        className="shrink-0 rounded-full border border-amber-200/20 bg-amber-200/10 px-3 py-1.5 text-xs font-semibold text-amber-50 transition hover:bg-amber-200/18"
+                      >
+                        Try another station
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="mt-6 flex items-center gap-3">
-                <VolumeIcon />
+                <button
+                  onClick={player.toggleMute}
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/8 text-slate-300 transition hover:bg-white/12"
+                  title={player.muted ? 'Unmute' : 'Mute'}
+                >
+                  {player.muted ? <MutedIcon /> : <VolumeIcon />}
+                </button>
                 <input
                   type="range"
                   min="0"
@@ -368,7 +419,7 @@ function App() {
                   onChange={(e) => player.setVolume(parseFloat(e.target.value))}
                   className="volume-slider flex-1"
                 />
-                <span className="w-10 text-right text-xs text-slate-400">{Math.round(player.volume * 100)}%</span>
+                <span className="w-10 text-right text-xs text-slate-400">{player.muted ? 0 : Math.round(player.volume * 100)}%</span>
               </div>
             </div>
           </div>
@@ -403,6 +454,22 @@ function StopIcon() {
   return (
     <svg viewBox="0 0 20 20" className="h-4 w-4 fill-current">
       <path d="M6.4 4.9h7.2A1.5 1.5 0 0115.1 6.4v7.2a1.5 1.5 0 01-1.5 1.5H6.4a1.5 1.5 0 01-1.5-1.5V6.4a1.5 1.5 0 011.5-1.5Z" />
+    </svg>
+  );
+}
+
+function PreviousIcon() {
+  return (
+    <svg viewBox="0 0 20 20" className="h-4 w-4 fill-current">
+      <path d="M5.8 4.2a1 1 0 011 1v9.6a1 1 0 11-2 0V5.2a1 1 0 011-1Zm2.45 5.2 6.32-4.02A1 1 0 0116.1 6.2v7.6a1 1 0 01-1.53.84l-6.32-4.02a1 1 0 010-1.7Z" />
+    </svg>
+  );
+}
+
+function NextIcon() {
+  return (
+    <svg viewBox="0 0 20 20" className="h-4 w-4 fill-current">
+      <path d="M14.2 4.2a1 1 0 00-1 1v9.6a1 1 0 102 0V5.2a1 1 0 00-1-1Zm-2.45 5.2L5.43 5.38A1 1 0 003.9 6.2v7.6a1 1 0 001.53.84l6.32-4.02a1 1 0 000-1.7Z" />
     </svg>
   );
 }
@@ -451,8 +518,16 @@ function LinkIcon() {
 
 function VolumeIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0 text-slate-400" fill="none" stroke="currentColor" strokeWidth="1.6">
+    <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.6">
       <path d="M11 5L6 9H2v6h4l5 4V5zM19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function MutedIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.6">
+      <path d="M11 5L6 9H2v6h4l5 4V5zM16 9l5 5M21 9l-5 5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

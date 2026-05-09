@@ -173,3 +173,17 @@ h4 {
 .bass-pulse {
   animation: bass-pulse 1.2s ease-in-out infinite;
 }
+
+.skeleton-pulse {
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.42;
+  }
+  50% {
+    opacity: 0.88;
+  }
+}
